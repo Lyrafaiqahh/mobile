@@ -1,8 +1,5 @@
 import 'dart:io';
 
-import 'package:project3/project3.dart' as project3;
-
-void main(List<String> arguments) {
 
 //fixlist
 // var fl = List<int>.filled(4,2);
@@ -45,16 +42,36 @@ void main(List<String> arguments) {
 //print('Hello world: ${project3.calculate()}!');
 
 //map
-var sudah = {'nim': "101", 'nama': "andi", 'umur': 20, 'nim': "102"};
-print(sudah);
-print(sudah['nama']);
-var opo = {
-  'nim': ["101", "102"],
-  'nama': ["andi", "budi"],
-  'umur': [20,21],
-};
-print(opo);
-print(opo['nama']![1]);
 
-  
+void main() {
+  // Map untuk menyimpan data mahasiswa (nama: kategori nilai)
+  var mahasiswa = <String, String>{};
+
+  // Loop input untuk 5 mahasiswa
+  for (int i = 1; i <= 5; i++) {
+    stdout.write("Masukkan nama mahasiswa ke-$i: ");
+    String? nama = stdin.readLineSync();
+
+    stdout.write("Masukkan nilai ujian $nama: ");
+    int nilai = int.tryParse(stdin.readLineSync() ?? '0') ?? 0;
+
+    // Tentukan kategori dengan if/else
+    String kategori;
+    if (nilai >= 80) {
+      kategori = 'A';
+    } else if (nilai >= 60) {
+      kategori = 'B';
+    } else {
+      kategori = 'C';
+    }
+
+    // Simpan ke map
+    mahasiswa[nama ?? 'Mahasiswa $i'] = kategori;
+  }
+
+  // Tampilkan hasil akhir
+  print("\n=== Hasil Kategori Nilai Mahasiswa ===");
+  mahasiswa.forEach((nama, kategori) {
+    print("Nama: $nama, Kategori: $kategori");
+  });
 }

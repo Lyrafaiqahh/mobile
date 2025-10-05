@@ -1,18 +1,16 @@
 import 'dart:io';
 
 void main() {
-  // 2. Program menghitung union & intersection dari dua set
-  Set<String> setA = {'apel', 'jeruk', 'mangga'};
-  Set<String> setB = {'mangga', 'pisang', 'apel'};
+  print("Masukkan set A (pisahkan dengan koma): ");
+  var inputA = stdin.readLineSync()!;
+  var setA = inputA.split(',').map((e) => e.trim()).toSet();
 
-  // Union = gabungan
-  Set<String> union = setA.union(setB);
+  print("Masukkan set B (pisahkan dengan koma): ");
+  var inputB = stdin.readLineSync()!;
+  var setB = inputB.split(',').map((e) => e.trim()).toSet();
 
-  // Intersection = irisan
-  Set<String> intersection = setA.intersection(setB);
-
-  print('Set A: $setA');
-  print('Set B: $setB');
-  print('Union: $union');
-  print('Intersection: $intersection');
+  print("Set A: $setA");
+  print("Set B: $setB");
+  print("Union: ${setA.union(setB)}");
+  print("Intersection: ${setA.intersection(setB)}");
 }

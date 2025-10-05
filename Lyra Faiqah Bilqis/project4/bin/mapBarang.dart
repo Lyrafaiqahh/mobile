@@ -1,27 +1,15 @@
 import 'dart:io';
 
 void main() {
-  // 3. Gunakan Map untuk menyimpan data barang (dimulai dengan 1 barang saja)
-  List<Map<String, dynamic>> daftarBarang = [
-    {'kode': 'BRG001', 'nama': 'Laptop', 'harga': 8500000},
-  ];
+  // Map Barang
+  var barang = {
+    "B001": {"nama": "Laptop", "harga": 10000000},
+    "B002": {"nama": "Mouse", "harga": 150000},
+    "B003": {"nama": "Keyboard", "harga": 300000},
+  };
 
-  print('Daftar Barang Awal:');
-  for (var barang in daftarBarang) {
-    print('Kode: ${barang['kode']}, Nama: ${barang['nama']}, Harga: Rp${barang['harga']}');
-  }
-
-  print('\n--- Menambahkan 3 barang baru ---\n');
-
-  // Menambahkan 3 barang baru
-  daftarBarang.add({'kode': 'BRG002', 'nama': 'Mouse', 'harga': 150000});
-  daftarBarang.add({'kode': 'BRG003', 'nama': 'Keyboard', 'harga': 250000});
-  daftarBarang.add({'kode': 'BRG004', 'nama': 'Monitor', 'harga': 2500000});
-
-  print('Daftar Barang Setelah Penambahan:');
-  for (var barang in daftarBarang) {
-    print('Kode: ${barang['kode']}, Nama: ${barang['nama']}, Harga: Rp${barang['harga']}');
-  }
-
-  print('\nTotal barang: ${daftarBarang.length}');
+  // Tampilkan semua barang
+  barang.forEach((kode, data) {
+    print("Kode: $kode, Nama: ${data['nama']}, Harga: Rp${data['harga']}");
+  });
 }
