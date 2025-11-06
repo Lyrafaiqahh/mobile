@@ -36,6 +36,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   camera: ^0.11.3
 
+  path_provider: ^2.1.4     # untuk menyimpan file ke direktori lokal
+  path: ^1.9.0              # untuk manipulasi path file
+  permission_handler: ^11.3.1  # opsional - untuk minta izin kamera di runtime
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
