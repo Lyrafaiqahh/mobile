@@ -372,21 +372,21 @@ Future<String> readFile(String fileName) async {
   }
 }
 
-// Simpan object sebagai JSON
-Future<File> writeJson(String fileName, Map<String, dynamic> json) async {
-  final String content = jsonEncode(json);
-  return writeFile(fileName, content);
-}
+// // Simpan object sebagai JSON
+// Future<File> writeJson(String fileName, Map<String, dynamic> json) async {
+//   final String content = jsonEncode(json);
+//   return writeFile(fileName, content);
+// }
 
-// Baca JSON dari file
-Future<Map<String, dynamic>> readJson(String fileName) async {
-  try {
-    final String content = await readFile(fileName);
-    return jsonDecode(content);
-  } catch (e) {
-    return {};
-  }
-}
+// // Baca JSON dari file
+// Future<Map<String, dynamic>> readJson(String fileName) async {
+//   try {
+//     final String content = await readFile(fileName);
+//     return jsonDecode(content);
+//   } catch (e) {
+//     return {};
+//   }
+// }
 
 // Cek apakah file ada
 Future<bool> fileExists(String fileName) async {
@@ -398,224 +398,493 @@ return file.exists();
 
 // Hapus file
 Future<void> deleteFile(String fileName) async {
-try {
 final Directory dir = await documentDirectory;
 final File file = File(path.join(dir.path, fileName));
 if (await file. exists()) {
   await file.delete();
 }
-} catch (e) {
- print ('Error deleting file: $e');
+} 
 }
+
+
+class DirectoryService {
+  final FileService _fileService = FileService();
+
+Future<Directory> createDirectory(String dirName) async {
+  final Directory appDir = await _fileService.documentDirectory;
+  final Directory newDir = Directory(path.join(appDir.path, dirName));
+  if (!await newDir.exists()) {
+    await newDir.create(recursive: true);
+  }
+  return newDir;
+}
+
+Future<List<FileSystemEntity>> listFiles(String dirName) async {
+  final Directory dir = await createDirectory(dirName);
+  return dir.list().toList();
+}
+
+Future<void> deleteDirectory(String dirName) async {
+  final Directory appDir = await _fileService.documentDirectory;
+  final Directory dir = Directory(path.join(appDir.path, dirName));
+  if (await dir.exists()) {
+    await dir.delete(recursive: true);
+  }
 }
 }
 
-class UserDataService {
-  final FileService _fileService = FileService() ;
-  final String _fileName = 'user_data.json';
 
-Future<void> saveUserData({
-required String name,
-required String email,
-int? age,
-} ) async {
-final Map<String, dynamic> userData = {
-'name': name,
-'email': email,
-'age': age ?? 0,
-'last_update': DateTime. now() . toIso8601String(),
-};
-await _fileService.writeJson(_fileName, userData);
-}
+class NoteService {
+  final DirectoryService _diService  = DirectoryService();
+  final String _notesDir = 'notes';
 
-Future<Map<String, dynamic>?> readUserData() async {
-final exists = await _fileService.fileExists(_fileName);
-if (!exists) return null;
+  Future<void> saveNote({
+    required String title,
+    required String content,
+  }) async {
+    final Directory notesDir = await _diService.createDirectory(_notesDir);
+    
+    final String fileName =
+        '${DateTime.now().millisecondsSinceEpoch}.json';
+    final File file = File(path.join(notesDir.path, fileName));
+    
+    final noteData = {
+      'title': title,
+      'content': content,
+      'created_at': DateTime.now().toIso8601String(),
+    };
 
-final Map<String, dynamic> data = await _fileService.readJson(_fileName); ;
-return data. isNotEmpty ? data : null;
-}
-
-Future<void> deleteUserData() async {
-  await _fileService.deleteFile(_fileName); 
+    await file.writeAsString(jsonEncode(noteData));
   }
 
-Future<bool> hasUserData() async {
-return await _fileService.fileExists(_fileName); 
+  Future<List<Map<String, dynamic>>> getAllNotes() async {
+    final Directory notesDir = await _diService.createDirectory(_notesDir);
+    final List<FileSystemEntity> files = await notesDir.list().toList();
+
+  List<Map<String, dynamic>> notes = [];
+for (var entity in files) {
+  if (entity is File && entity.path.endsWith('.json')) {
+    final content = await entity.readAsString();
+    final data = jsonDecode(content);
+    data['file_path'] = entity.path;
+    notes.add(data);
+  }
+}
+
+// Urutkan dari terbaru
+notes.sort(
+  (a, b) =>
+      b['created_at'].toString().compareTo(a['created_at'].toString()),
+);
+
+return notes;
+  }
+    
+Future<void> deleteNoteByPath(String filePath) async {
+  final File file = File(filePath);
+  if (await file.exists()) {
+    await file.delete();
+  }
 }
 }
 
+///
+/// =============================================================
+/// UI: Flutter Notes App
+/// =============================================================
+/// Run | Debug | Profile
 void main() {
-  runApp(LyraApp());
+  runApp(NotesLyraApp());
 }
 
-class LyraApp extends StatelessWidget {
+class NotesLyraApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp ( 
-      title: 'User Data JSON Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.teal),
-        home: UserProfilePage(),
-    );
+    return MaterialApp(
+      title: 'Flutter Notes (Local File)',
+      theme: ThemeData(primarySwatch: Colors.indigo),
+      home: NotesPage(),
+    ); // MaterialApp
   }
 }
 
-class UserProfilePage extends StatefulWidget {
+class NotesPage extends StatefulWidget {
   @override
-  _UserProfilePageState createState() => _UserProfilePageState();
+  _NotesPageState createState() => _NotesPageState();
 }
 
-class _UserProfilePageState extends State<UserProfilePage> {
-  final UserDataService _userService = UserDataService();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _ageController = TextEditingController();
-
-  Map<String, dynamic>? _savedData;
+class _NotesPageState extends State<NotesPage> {
+  final NoteService _noteService = NoteService();
+  List<Map<String, dynamic>> _notes = [];
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadNotes();
   }
 
-  Future<void> _loadUserData() async {
-    final data = await _userService.readUserData();
-      setState(() {
-        _savedData = data;
-      });
+  Future<void> _loadNotes() async {
+    final notes = await _noteService.getAllNotes();
+    setState(() => _notes = notes);
+  }
+
+  Future<void> _addNote() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AddNotePage()),
+    );
+    if (result == true) {
+      _loadNotes();
     }
+  }
 
-    Future<void> _saveUserData() async {
-      await _userService.saveUserData(
-        name: _nameController.text.trim(),
-        email: _emailController.text.trim(),
-        age: int.tryParse(_ageController.text),
-      );
+  Future<void> _deleteNote(String filePath) async {
+    await _noteService.deleteNoteByPath(filePath);
+    _loadNotes();
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('My Notes')),
+      body: _notes.isEmpty
+          ? Center(child: Text('Belum ada catatan.'))
+          : ListView.builder(
+              itemCount: _notes.length,
+              itemBuilder: (context, index) {
+                final note = _notes[index];
+                return Card(
+                  margin: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  child: ListTile(
+                    title: Text(note['title']),
+                    subtitle: Text(
+                      note['content'],
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => NoteDetailPage(note: note),
+                      ),
+                    ),
+                    trailing: IconButton(
+                      icon: Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _deleteNote(note['file_path']),
+                    ),
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addNote,
+        child: Icon(Icons.add),
+      ),
+    );
+  }
+} // END of _NotesPageState
+
+
+///
+/// UI: AddNotePage – form untuk menulis note baru
+///
+class AddNotePage extends StatefulWidget {
+  @override
+  _AddNotePageState createState() => _AddNotePageState();
+}
+
+class _AddNotePageState extends State<AddNotePage> {
+  final NoteService _noteService = NoteService();
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _contentController = TextEditingController();
+
+  Future<void> _saveNote() async {
+    if (_titleController.text.isEmpty || _contentController.text.isEmpty) {
       ScaffoldMessenger.of(
         context,
-        ).showSnackBar(SnackBar(content: Text('User data saved successfully!')));
-      await _loadUserData();
-  }
+      ).showSnackBar(SnackBar(content: Text('Isi semua field dulu!')));
+      return;
+    }
 
-  Future<void> _deleteUserData() async {
-    await _userService.deleteUserData();
-    setState(() => _savedData = null);
+    await _noteService.saveNote(
+      title: _titleController.text,
+      content: _contentController.text,
+    );
+
     ScaffoldMessenger.of(
       context,
-      ).showSnackBar(SnackBar(content: Text('User data deleted.')));
+    ).showSnackBar(SnackBar(content: Text('Catatan disimpan!')));
+    Navigator.pop(context, true);
   }
-
 
 @override
 Widget build(BuildContext context) {
   return Scaffold(
-    appBar: AppBar(title: Text('Profil User (File JSON)')),
-    body: SingleChildScrollView(
+    appBar: AppBar(title: Text('Catatan Baru')),
+    body: Padding(
       padding: EdgeInsets.all(16),
       child: Column(
         children: [
-          // FORM INPUT
           TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: 'Nama',
-              border: OutlineInputBorder(),
-            ), // InputDecoration
+            controller: _titleController,
+            decoration: InputDecoration(labelText: 'Judul'),
           ), // TextField
           SizedBox(height: 10),
-
-          TextField(
-            controller: _emailController,
-            decoration: InputDecoration(
-              labelText: 'Email',
-              border: OutlineInputBorder(),
-            ), // InputDecoration
-          ), // TextField
-          SizedBox(height: 10),
-
-          TextField(
-            controller: _ageController,
-            decoration: InputDecoration(
-              labelText: 'Usia',
-              border: OutlineInputBorder(),
-            ), // InputDecoration
-            keyboardType: TextInputType.number,
-          ), // TextField
-
+          Expanded(
+            child: TextField(
+              controller: _contentController,
+              decoration: InputDecoration(labelText: 'Isi Catatan'),
+              maxLines: null,
+              expands: true,
+              textAlignVertical: TextAlignVertical.top,
+            ), // TextField
+          ), // Expanded
           SizedBox(height: 20),
+          ElevatedButton.icon(
+            icon: Icon(Icons.save),
+            label: Text('Simpan'),
+            onPressed: _saveNote,
+          ), // ElevatedButton.icon
+        ],
+      ),
+    ), // Padding
+  ); // Scaffold
+}
+}
+
+///
+/// UI: NoteDetailPage – menampilkan isi note
+/// ======================================================
+///
+class NoteDetailPage extends StatelessWidget {
+  final Map<String, dynamic> note;
+  const NoteDetailPage({required this.note});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(note['title'] ?? 'Note')),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(note['content'] ?? ''),
+      ), // Padding
+    ); // Scaffold
+  }
+}
+
+  
+
+   
+
+
+
+
+// class UserDataService {
+//   final FileService _fileService = FileService() ;
+//   final String _fileName = 'user_data.json';
+
+// Future<void> saveUserData({
+// required String name,
+// required String email,
+// int? age,
+// } ) async {
+// final Map<String, dynamic> userData = {
+// 'name': name,
+// 'email': email,
+// 'age': age ?? 0,
+// 'last_update': DateTime. now() . toIso8601String(),
+// };
+// await _fileService.writeJson(_fileName, userData);
+// }
+
+// Future<Map<String, dynamic>?> readUserData() async {
+// final exists = await _fileService.fileExists(_fileName);
+// if (!exists) return null;
+
+// final Map<String, dynamic> data = await _fileService.readJson(_fileName); ;
+// return data. isNotEmpty ? data : null;
+// }
+
+// Future<void> deleteUserData() async {
+//   await _fileService.deleteFile(_fileName); 
+//   }
+
+// Future<bool> hasUserData() async {
+// return await _fileService.fileExists(_fileName); 
+// }
+// }
+
+// void main() {
+//   runApp(LyraApp());
+// }
+
+// class LyraApp extends StatelessWidget {
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp ( 
+//       title: 'User Data JSON Demo',
+//       theme: ThemeData(
+//         primarySwatch: Colors.teal),
+//         home: UserProfilePage(),
+//     );
+//   }
+// }
+
+// class UserProfilePage extends StatefulWidget {
+//   @override
+//   _UserProfilePageState createState() => _UserProfilePageState();
+// }
+
+// class _UserProfilePageState extends State<UserProfilePage> {
+//   final UserDataService _userService = UserDataService();
+//   final TextEditingController _nameController = TextEditingController();
+//   final TextEditingController _emailController = TextEditingController();
+//   final TextEditingController _ageController = TextEditingController();
+
+//   Map<String, dynamic>? _savedData;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _loadUserData();
+//   }
+
+//   Future<void> _loadUserData() async {
+//     final data = await _userService.readUserData();
+//       setState(() {
+//         _savedData = data;
+//       });
+//     }
+
+//     Future<void> _saveUserData() async {
+//       await _userService.saveUserData(
+//         name: _nameController.text.trim(),
+//         email: _emailController.text.trim(),
+//         age: int.tryParse(_ageController.text),
+//       );
+
+//       ScaffoldMessenger.of(
+//         context,
+//         ).showSnackBar(SnackBar(content: Text('User data saved successfully!')));
+//       await _loadUserData();
+//   }
+
+//   Future<void> _deleteUserData() async {
+//     await _userService.deleteUserData();
+//     setState(() => _savedData = null);
+//     ScaffoldMessenger.of(
+//       context,
+//       ).showSnackBar(SnackBar(content: Text('User data deleted.')));
+//   }
+
+
+// @override
+// Widget build(BuildContext context) {
+//   return Scaffold(
+//     appBar: AppBar(title: Text('Profil User (File JSON)')),
+//     body: SingleChildScrollView(
+//       padding: EdgeInsets.all(16),
+//       child: Column(
+//         children: [
+//           // FORM INPUT
+//           TextField(
+//             controller: _nameController,
+//             decoration: InputDecoration(
+//               labelText: 'Nama',
+//               border: OutlineInputBorder(),
+//             ), // InputDecoration
+//           ), // TextField
+//           SizedBox(height: 10),
+
+//           TextField(
+//             controller: _emailController,
+//             decoration: InputDecoration(
+//               labelText: 'Email',
+//               border: OutlineInputBorder(),
+//             ), // InputDecoration
+//           ), // TextField
+//           SizedBox(height: 10),
+
+//           TextField(
+//             controller: _ageController,
+//             decoration: InputDecoration(
+//               labelText: 'Usia',
+//               border: OutlineInputBorder(),
+//             ), // InputDecoration
+//             keyboardType: TextInputType.number,
+//           ), // TextField
+
+//           SizedBox(height: 20),
        
-        // BUTTONS
-Row(
-  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-  children: [
-    ElevatedButton.icon(
-      icon: Icon(Icons.save),
-      label: Text('Simpan'),
-      onPressed: _saveUserData,
-    ), // ElevatedButton.icon
+//         // BUTTONS
+// Row(
+//   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+//   children: [
+//     ElevatedButton.icon(
+//       icon: Icon(Icons.save),
+//       label: Text('Simpan'),
+//       onPressed: _saveUserData,
+//     ), // ElevatedButton.icon
 
-    ElevatedButton.icon(
-      icon: Icon(Icons.delete),
-      label: Text('Hapus'),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.redAccent,
-      ),
-      onPressed: _deleteUserData,
-    ),
-  ],
-),
+//     ElevatedButton.icon(
+//       icon: Icon(Icons.delete),
+//       label: Text('Hapus'),
+//       style: ElevatedButton.styleFrom(
+//         backgroundColor: Colors.redAccent,
+//       ),
+//       onPressed: _deleteUserData,
+//     ),
+//   ],
+// ),
 
-SizedBox(height: 30),
-Divider(),
+// SizedBox(height: 30),
+// Divider(),
 
-// TAMPILAN DATA YANG DISIMPAN
-_savedData == null
-    ? Text(
-        'Belum ada data tersimpan.',
-        style: TextStyle(color: Colors.grey),
-      ) // Text
-    : Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '📌 Data Tersimpan',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.teal,
-            ), // TextStyle
-          ), // Text
+// // TAMPILAN DATA YANG DISIMPAN
+// _savedData == null
+//     ? Text(
+//         'Belum ada data tersimpan.',
+//         style: TextStyle(color: Colors.grey),
+//       ) // Text
+//     : Column(
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Text(
+//             '📌 Data Tersimpan',
+//             style: TextStyle(
+//               fontSize: 16,
+//               fontWeight: FontWeight.bold,
+//               color: Colors.teal,
+//             ), // TextStyle
+//           ), // Text
 
-          SizedBox(height: 8),
+//           SizedBox(height: 8),
 
-          _buildDataRow('Nama', _savedData!['name']),
-          _buildDataRow('Email', _savedData!['email']),
-          _buildDataRow('Usia', _savedData!['age'].toString()),
-          _buildDataRow(
-            'Update Terakhir',
-            _savedData!['last_update'],
-          ),
-        ],
-      ), // Column
+//           _buildDataRow('Nama', _savedData!['name']),
+//           _buildDataRow('Email', _savedData!['email']),
+//           _buildDataRow('Usia', _savedData!['age'].toString()),
+//           _buildDataRow(
+//             'Update Terakhir',
+//             _savedData!['last_update'],
+//           ),
+//         ],
+//       ), // Column
 
-        ],
-      ),
-    ),
-  );
-}
+//         ],
+//       ),
+//     ),
+//   );
+// }
 
-Widget _buildDataRow(String label, String value) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Text('$label: ', style: TextStyle(fontWeight: FontWeight.bold)),
-          Expanded(child: Text(value)),
-      ],
-          ), 
-        ); 
-}
-}
+// Widget _buildDataRow(String label, String value) {
+//   return Padding(
+//     padding: const EdgeInsets.symmetric(vertical: 4),
+//     child: Row(
+//       children: [
+//         Text('$label: ', style: TextStyle(fontWeight: FontWeight.bold)),
+//           Expanded(child: Text(value)),
+//       ],
+//           ), 
+//         ); 
+// }
+// }
